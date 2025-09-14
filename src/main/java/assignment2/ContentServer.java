@@ -54,7 +54,8 @@ public class ContentServer {
                 out.flush();
 
                 String response = in.readLine();
-                System.out.println("Server: " + response);
+                System.out.println("Sending PUT to " + host + ":" + port + " with Lamport " + clock.getTime());
+                System.out.println("Server response: " + response);
                 while ((response = in.readLine()) != null && !response.isEmpty()) {
                     if (response.startsWith("Lamport-Clock:")) {
                         int servClock = Integer.parseInt(response.split(":")[1].trim());

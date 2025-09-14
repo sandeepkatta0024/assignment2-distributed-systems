@@ -61,38 +61,57 @@ public class AggregationServer {
         int lamportReceived = 0;
         int contentLength = 0;
         String line;
-        while(!(line = in.readLine()).isEmpty()) {
-            if(line.startsWith("Lamport-Clock:")) lamportReceived = Integer.parseInt(line.split(":")[1].trim());
-            else if(line.startsWith("Content-Length:")) contentLength = Integer.parseInt(line.split(":")[1].trim());
+
+        // Read headers
+        while ((line = in.readLine()) != null && !line.isEmpty()) {
+            if (line.startsWith("Lamport-Clock:")) {
+                lamportReceived = Integer.parseInt(line.split(":")[1].trim());
+            } else if (line.startsWith("Content-Length:")) {
+                contentLength = Integer.parseInt(line.split(":")[1].trim());
+            }
         }
 
-        char[] body = new char[contentLength];
-        int readSoFar = 0;
-        while(readSoFar < contentLength){
-            int n = in.read(body, readSoFar, contentLength - readSoFar);
-            if(n == -1) break;
-            readSoFar += n;
-        }
-        String json = new String(body);
-
-        JsonObject obj;
-        try {
-            obj = gson.fromJson(json, JsonObject.class);
-            if(!obj.has("id")) throw new Exception("Missing id");
-        } catch(Exception e){
-            out.write("HTTP/1.1 500 Internal Server Error\r\n\r\nInvalid JSON or missing 'id'.");
+        if (contentLength <= 0) {
+            out.write("HTTP/1.1 400 Bad Request\r\n\r\nMissing Content-Length.\r\n");
             out.flush();
             return;
         }
-        String id = obj.get("id").getAsString();
 
+        // Read body
+        char[] body = new char[contentLength];
+        int read = 0;
+        while (read < contentLength) {
+            int n = in.read(body, read, contentLength - read);
+            if (n == -1) break;
+            read += n;
+        }
+        String json = new String(body);
+
+        // Parse JSON
+        JsonObject obj;
+        try {
+            obj = gson.fromJson(json, JsonObject.class);
+            if (!obj.has("id")) throw new Exception("Missing id");
+        } catch (Exception e) {
+            out.write("HTTP/1.1 500 Internal Server Error\r\n\r\nInvalid JSON or missing 'id'.\r\n");
+            out.flush();
+            return;
+        }
+
+        // Update Lamport clock
         clock.update(lamportReceived);
 
+        // Store data
+        String id = obj.get("id").getAsString();
         boolean isFirst = !data.containsKey(id);
         data.put(id, new WeatherRecord(obj, clock.getTime()));
 
+        // Save immediately to disk
         saveToDisk();
 
+        System.out.println("PUT received for id: " + id + ", Lamport: " + clock.getTime());
+
+        // Send response
         out.write(isFirst ? "HTTP/1.1 201 Created\r\n" : "HTTP/1.1 200 OK\r\n");
         out.write("Lamport-Clock: " + clock.getTime() + "\r\n\r\n");
         out.flush();

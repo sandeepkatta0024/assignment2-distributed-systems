@@ -9,22 +9,28 @@ public class GETClient {
 
     public static void main(String[] args) throws Exception {
         if(args.length != 1){
-            System.out.println("Usage: java GETClient <host:port>");
+            System.out.println("Usage: java GETClient <host:port> or <http://host:port/path>");
             return;
         }
-        String[] split = args[0].split(":");
-        String host = split[0];
-        int port = Integer.parseInt(split[1]);
+
+        String urlString = args[0];
+        if(!urlString.startsWith("http://") && !urlString.startsWith("https://")){
+            urlString = "http://" + urlString;
+        }
+
+        URL url = new URL(urlString);
+        String host = url.getHost();
+        int port = (url.getPort() == -1) ? url.getDefaultPort() : url.getPort();
+        String path = (url.getPath().isEmpty()) ? "/weather.json" : url.getPath();
 
         Gson gson = new Gson();
-
         clock.tick();
 
         try(Socket socket = new Socket(host, port);
             BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
             BufferedWriter out = new BufferedWriter(new OutputStreamWriter(socket.getOutputStream()))) {
 
-            out.write("GET /weather.json HTTP/1.1\r\n");
+            out.write("GET " + path + " HTTP/1.1\r\n");
             out.write("Host: " + host + "\r\n");
             out.write("Lamport-Clock: " + clock.getTime() + "\r\n\r\n");
             out.flush();
@@ -34,7 +40,6 @@ public class GETClient {
             System.out.println(status);
 
             String line;
-            // Read headers and update Lamport clock
             while((line = in.readLine()) != null && !line.trim().isEmpty()){
                 if(line.startsWith("Lamport-Clock:")){
                     int servClock = Integer.parseInt(line.split(":")[1].trim());
@@ -42,20 +47,28 @@ public class GETClient {
                 }
             }
 
-            // Read JSON body
+            // Read body
             StringBuilder sb = new StringBuilder();
             while((line = in.readLine()) != null){
                 sb.append(line);
             }
 
             if(sb.length() > 0){
-                JsonArray arr = gson.fromJson(sb.toString(), JsonArray.class);
-                for(JsonElement el : arr){
-                    JsonObject obj = el.getAsJsonObject();
-                    for(String key : obj.keySet()){
-                        System.out.println(key + ": " + obj.get(key).getAsString());
+                String body = sb.toString().trim();
+
+                // Check if the body starts with '[' meaning a JSON array
+                if(body.startsWith("[")){
+                    JsonArray arr = gson.fromJson(body, JsonArray.class);
+                    for(JsonElement el : arr){
+                        JsonObject obj = el.getAsJsonObject();
+                        for(String key : obj.keySet()){
+                            System.out.println(key + ": " + obj.get(key).getAsString());
+                        }
+                        System.out.println();
                     }
-                    System.out.println();
+                } else {
+                    // Just print the plain text (error or 404)
+                    System.out.println(body);
                 }
             }
         }
