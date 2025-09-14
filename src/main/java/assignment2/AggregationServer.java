@@ -231,8 +231,8 @@ public class AggregationServer {
 
             // Split top-level objects by ',', simple split (may not handle nested commas)
             String[] items = content.split("},\\s*\\{");
-            for (int i = 0; i < items.length; i++) {
-                String item = items[i];
+            for (String s : items) {
+                String item = s;
                 if (!item.startsWith("{")) item = "{" + item;
                 if (!item.endsWith("}")) item = item + "}";
 

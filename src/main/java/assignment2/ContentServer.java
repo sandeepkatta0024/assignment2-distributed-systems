@@ -10,7 +10,7 @@ import java.util.*;
  */
 public class ContentServer {
     // Lamport clock instance to maintain causal consistency
-    private static LamportClock clock = new LamportClock();
+    private static final LamportClock clock = new LamportClock();
 
     /**
      * Main accepts two args: target host:port and path to data file.

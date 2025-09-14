@@ -9,7 +9,7 @@ import java.util.*;
  * It maintains a LamportClock and parses the JSON response using a custom JSON parser.
  */
 public class GETClient {
-    private static LamportClock clock = new LamportClock();
+    private static final LamportClock clock = new LamportClock();
 
     /**
      * Main entry point: expects one argument - host:port or full URL.

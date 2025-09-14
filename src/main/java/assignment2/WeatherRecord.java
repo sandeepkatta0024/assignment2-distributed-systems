@@ -25,12 +25,6 @@ public class WeatherRecord {
         this.timestamp = System.currentTimeMillis();
     }
 
-    /**
-     * Returns the unique ID of this weather record.
-     */
-    public String getId() {
-        return data.get("id");
-    }
 
     /**
      * Returns the weather data map.
@@ -39,10 +33,4 @@ public class WeatherRecord {
         return data;
     }
 
-    /**
-     * Updates the timestamp to current time (refreshing expiry).
-     */
-    public void refreshTimestamp() {
-        timestamp = System.currentTimeMillis();
-    }
 }
