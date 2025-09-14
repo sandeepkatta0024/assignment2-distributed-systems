@@ -9,7 +9,7 @@ import com.google.gson.*;
 public class AggregationServer {
     private static final int EXPIRY_MS = 30000; // 30 seconds expiry
     private static final String DATA_STORE = "server_data.json";
-    private static final Map<String, WeatherRecord> data = new ConcurrentHashMap<>();
+    static final Map<String, WeatherRecord> data = new ConcurrentHashMap<>();
     private static final LamportClock clock = new LamportClock();
     private static final Gson gson = new Gson();
 
@@ -31,29 +31,30 @@ public class AggregationServer {
         }
     }
 
-    private static void removeExpired() {
+    static void removeExpired() {
         long now = System.currentTimeMillis();
         boolean removed = data.entrySet().removeIf(entry -> now - entry.getValue().timestamp > EXPIRY_MS);
         if(removed) saveToDisk();
     }
 
-    private static void handleConnection(Socket socket) {
-        try(BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-            BufferedWriter out = new BufferedWriter(new OutputStreamWriter(socket.getOutputStream()))) {
+    static void handleConnection(Socket socket) {
+        try (socket; BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+             BufferedWriter out = new BufferedWriter(new OutputStreamWriter(socket.getOutputStream()))) {
+            try {
 
-            String requestLine = in.readLine();
-            if(requestLine == null) return;
+                String requestLine = in.readLine();
+                if (requestLine == null) return;
 
-            if(requestLine.startsWith("PUT")) handlePut(in, out);
-            else if(requestLine.startsWith("GET")) handleGet(out);
-            else {
-                out.write("HTTP/1.1 400 Bad Request\r\n\r\n");
-                out.flush();
+                if (requestLine.startsWith("PUT")) handlePut(in, out);
+                else if (requestLine.startsWith("GET")) handleGet(out);
+                else {
+                    out.write("HTTP/1.1 400 Bad Request\r\n\r\n");
+                    out.flush();
+                }
+            } catch (Exception e) {
+                // log or ignore
             }
-        } catch(Exception e){
-            // log or ignore
-        } finally {
-            try { socket.close(); } catch(Exception ignored) {}
+        } catch (Exception ignored) {
         }
     }
 
@@ -138,7 +139,7 @@ public class AggregationServer {
         out.flush();
     }
 
-    private synchronized static void saveToDisk() {
+    synchronized static void saveToDisk() {
         try(Writer writer = new FileWriter(DATA_STORE)) {
             JsonArray arr = new JsonArray();
             data.values().forEach(record -> arr.add(record.obj));
@@ -148,7 +149,7 @@ public class AggregationServer {
         }
     }
 
-    private synchronized static void loadFromDisk() {
+    synchronized static void loadFromDisk() {
         try(FileReader reader = new FileReader(DATA_STORE)) {
             JsonElement el = JsonParser.parseReader(reader);
             if(el.isJsonArray()) {
