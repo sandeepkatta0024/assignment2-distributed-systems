@@ -1,84 +1,85 @@
 package assignment2;
+
 import java.io.*;
 import java.net.*;
 import java.util.*;
 import java.util.concurrent.*;
-import com.google.gson.Gson;
-import com.google.gson.JsonObject;
+import com.google.gson.*;
 
 public class AggregationServer {
-    private static final int EXPIRY_MS = 30000; // 30 seconds
+    private static final int EXPIRY_MS = 30000; // 30 seconds expiry
     private static final String DATA_STORE = "server_data.json";
     private static final Map<String, WeatherRecord> data = new ConcurrentHashMap<>();
     private static final LamportClock clock = new LamportClock();
     private static final Gson gson = new Gson();
 
     public static void main(String[] args) throws Exception {
-        if (args.length != 1) {
-            System.out.println("Usage: java AggregationServer <port>");
-            return;
-        }
-        int port = Integer.parseInt(args[0]);
+        int port = (args.length>0) ? Integer.parseInt(args[0]) : 4567;
+
         loadFromDisk();
+
         ScheduledExecutorService expiryService = Executors.newSingleThreadScheduledExecutor();
-        expiryService.scheduleAtFixedRate(() -> removeExpired(), 2, 2, TimeUnit.SECONDS);
+        expiryService.scheduleAtFixedRate(AggregationServer::removeExpired, 2, 2, TimeUnit.SECONDS);
 
-        ServerSocket serverSocket = new ServerSocket(port);
-        System.out.println("AggregationServer running on port " + port);
+        try(ServerSocket serverSocket = new ServerSocket(port)) {
+            System.out.println("AggregationServer started on port " + port);
 
-        while (true) {
-            Socket socket = serverSocket.accept();
-            new Thread(() -> handleConnection(socket)).start();
+            while(true) {
+                Socket socket = serverSocket.accept();
+                new Thread(() -> handleConnection(socket)).start();
+            }
         }
     }
 
     private static void removeExpired() {
         long now = System.currentTimeMillis();
-        data.entrySet().removeIf(entry -> now - entry.getValue().timestamp > EXPIRY_MS);
-        saveToDisk();
+        boolean removed = data.entrySet().removeIf(entry -> now - entry.getValue().timestamp > EXPIRY_MS);
+        if(removed) saveToDisk();
     }
 
     private static void handleConnection(Socket socket) {
-        try (BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-             BufferedWriter out = new BufferedWriter(new OutputStreamWriter(socket.getOutputStream()))) {
+        try(BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+            BufferedWriter out = new BufferedWriter(new OutputStreamWriter(socket.getOutputStream()))) {
 
-            String line = in.readLine();
-            if (line == null) return;
-            String method = line.startsWith("PUT") ? "PUT" : line.startsWith("GET") ? "GET" : "";
+            String requestLine = in.readLine();
+            if(requestLine == null) return;
 
-            if (method.equals("PUT")) handlePut(line, in, out);
-            else if (method.equals("GET")) handleGet(out, in);
+            if(requestLine.startsWith("PUT")) handlePut(in, out);
+            else if(requestLine.startsWith("GET")) handleGet(out);
             else {
                 out.write("HTTP/1.1 400 Bad Request\r\n\r\n");
                 out.flush();
             }
-        } catch (Exception e) {
-            //e.printStackTrace();
+        } catch(Exception e){
+            // log or ignore
         } finally {
-            try { socket.close(); } catch (Exception ignore) {}
+            try { socket.close(); } catch(Exception ignored) {}
         }
     }
 
-    private static void handlePut(String requestLine, BufferedReader in, BufferedWriter out) throws IOException {
+    private static void handlePut(BufferedReader in, BufferedWriter out) throws IOException {
         int lamportReceived = 0;
         int contentLength = 0;
         String line;
-        // HTTP Header parsing
-        while (!(line = in.readLine()).isEmpty()) {
-            if (line.startsWith("Lamport-Clock:")) lamportReceived = Integer.parseInt(line.split(":")[1].trim());
-            else if (line.startsWith("Content-Length:")) contentLength = Integer.parseInt(line.split(":")[1].trim());
+        while(!(line = in.readLine()).isEmpty()) {
+            if(line.startsWith("Lamport-Clock:")) lamportReceived = Integer.parseInt(line.split(":")[1].trim());
+            else if(line.startsWith("Content-Length:")) contentLength = Integer.parseInt(line.split(":")[1].trim());
         }
 
         char[] body = new char[contentLength];
-        in.read(body);
+        int readSoFar = 0;
+        while(readSoFar < contentLength){
+            int n = in.read(body, readSoFar, contentLength - readSoFar);
+            if(n == -1) break;
+            readSoFar += n;
+        }
         String json = new String(body);
 
-        // Validate and parse JSON
         JsonObject obj;
         try {
             obj = gson.fromJson(json, JsonObject.class);
-            if (!obj.has("id")) throw new Exception();
-        } catch (Exception e) {
+            if(!obj.has("id")) throw new Exception("Missing id");
+        } catch(Exception e){
             out.write("HTTP/1.1 500 Internal Server Error\r\n\r\nInvalid JSON or missing 'id'.");
             out.flush();
             return;
@@ -86,51 +87,59 @@ public class AggregationServer {
         String id = obj.get("id").getAsString();
 
         clock.update(lamportReceived);
+
         boolean isFirst = !data.containsKey(id);
         data.put(id, new WeatherRecord(obj, clock.getTime()));
+
         saveToDisk();
 
         out.write(isFirst ? "HTTP/1.1 201 Created\r\n" : "HTTP/1.1 200 OK\r\n");
-        out.write("Lamport-Clock: " + clock.getTime() + "\r\n");
-        out.write("\r\n");
+        out.write("Lamport-Clock: " + clock.getTime() + "\r\n\r\n");
         out.flush();
     }
 
-    private static void handleGet(BufferedWriter out, BufferedReader in) throws IOException {
+    private static void handleGet(BufferedWriter out) throws IOException {
         clock.tick();
         removeExpired();
-        if (data.isEmpty()) {
-            out.write("HTTP/1.1 204 No Content\r\n\r\n");
-        } else {
-            out.write("HTTP/1.1 200 OK\r\n");
-            out.write("Lamport-Clock: " + clock.getTime() + "\r\n");
-            out.write("Content-Type: application/json\r\n\r\n");
-            for (WeatherRecord record : data.values()) {
-                out.write(gson.toJson(record.obj));
-                out.write("\r\n"); // Send each JSON object on a new line if multiple exist
-            }
+
+        if(data.isEmpty()) {
+            out.write("HTTP/1.1 404 Not Found\r\n\r\nNo weather data available.");
+            out.flush();
+            return;
         }
+
+        out.write("HTTP/1.1 200 OK\r\n");
+        out.write("Lamport-Clock: " + clock.getTime() + "\r\n");
+        out.write("Content-Type: application/json\r\n\r\n");
+
+        // Aggregate all weather JSON objects into an array
+        JsonArray arr = new JsonArray();
+        data.values().forEach(record -> arr.add(record.obj));
+        out.write(gson.toJson(arr));
         out.flush();
     }
 
-    private static void saveToDisk() {
-        try (FileWriter fw = new FileWriter(DATA_STORE)) {
-            for (WeatherRecord record : data.values()) {
-                fw.write(gson.toJson(record.obj));
-                fw.write("\n");
-            }
-        } catch (IOException e) {
-            // ignore for brevity
+    private synchronized static void saveToDisk() {
+        try(Writer writer = new FileWriter(DATA_STORE)) {
+            JsonArray arr = new JsonArray();
+            data.values().forEach(record -> arr.add(record.obj));
+            gson.toJson(arr, writer);
+        } catch(IOException e) {
+            // ignore or log error
         }
     }
-    private static void loadFromDisk() {
-        try (BufferedReader br = new BufferedReader(new FileReader(DATA_STORE))) {
-            String line;
-            while ((line = br.readLine()) != null) {
-                JsonObject obj = gson.fromJson(line, JsonObject.class);
-                String id = obj.get("id").getAsString();
-                data.put(id, new WeatherRecord(obj, 0));
+
+    private synchronized static void loadFromDisk() {
+        try(FileReader reader = new FileReader(DATA_STORE)) {
+            JsonElement el = JsonParser.parseReader(reader);
+            if(el.isJsonArray()) {
+                JsonArray arr = el.getAsJsonArray();
+                for(JsonElement element : arr) {
+                    JsonObject obj = element.getAsJsonObject();
+                    String id = obj.get("id").getAsString();
+                    data.put(id, new WeatherRecord(obj, 0));
+                }
             }
-        } catch (IOException ignore) {}
+        } catch(IOException ignored){}
     }
 }

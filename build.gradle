@@ -22,17 +22,6 @@ dependencies {
 }
 
 application {
-    // Default main class (can be overridden when running)
-    mainClass = 'assignment2.AggregationServer'
-}
-
-sourceSets {
-    main {
-        java {
-            srcDirs = ['src/main/java']
-        }
-        resources {
-            srcDirs = ['src/main/resources']
-        }
-    }
+    // Default main class (can be overridden)
+    mainClass = project.findProperty("mainClass") ?: "assignment2.AggregationServer"
 }
