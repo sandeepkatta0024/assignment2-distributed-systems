@@ -1,20 +1,23 @@
 package assignment2;
 
 import org.junit.Test;
-import com.google.gson.*;
+
+import java.util.LinkedHashMap;
+import java.util.Map;
+
 import static org.junit.Assert.*;
 
 public class WeatherRecordTest {
 
     @Test
     public void testCreateWeatherRecord() {
-        JsonObject obj = new JsonObject();
-        obj.addProperty("id", "ID123");
-        obj.addProperty("temp", 25);
+        Map<String, String> map = new LinkedHashMap<>();
+        map.put("id", "ID123");
+        map.put("temp", "25");
 
-        WeatherRecord wr = new WeatherRecord(obj, 3);
+        WeatherRecord wr = new WeatherRecord(map, 3);
 
-        assertEquals(obj, wr.obj);
+        assertEquals(map, wr.getData());
         assertEquals(3, wr.lamport);
         assertTrue(wr.timestamp > 0);
     }

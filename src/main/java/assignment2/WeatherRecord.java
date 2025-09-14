@@ -1,14 +1,48 @@
 package assignment2;
 
-import com.google.gson.JsonObject;
+import java.util.Map;
 
+/**
+ * Represents a weather data record with associated Lamport timestamp and last update time.
+ */
 public class WeatherRecord {
-    JsonObject obj;
-    long timestamp;
-    int lamport;
-    public WeatherRecord(JsonObject obj, int lamport) {
-        this.obj = obj;
+    // Weather data as key-value pairs (strings)
+    private final Map<String, String> data;
+
+    // Last update timestamp in milliseconds since epoch
+    public long timestamp;
+
+    // Lamport timestamp for this record
+    public int lamport;
+
+    /**
+     * Constructs a WeatherRecord from data map and Lamport time.
+     * Sets update timestamp to current time.
+     */
+    public WeatherRecord(Map<String, String> data, int lamport) {
+        this.data = data;
         this.lamport = lamport;
         this.timestamp = System.currentTimeMillis();
+    }
+
+    /**
+     * Returns the unique ID of this weather record.
+     */
+    public String getId() {
+        return data.get("id");
+    }
+
+    /**
+     * Returns the weather data map.
+     */
+    public Map<String, String> getData() {
+        return data;
+    }
+
+    /**
+     * Updates the timestamp to current time (refreshing expiry).
+     */
+    public void refreshTimestamp() {
+        timestamp = System.currentTimeMillis();
     }
 }

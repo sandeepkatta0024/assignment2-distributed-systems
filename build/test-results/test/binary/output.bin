@@ -1,0 +1,5 @@
+%PUT received for id: ID1, Lamport: 1
+%PUT received for id: ID1, Lamport: 3
+%PUT received for id: ID1, Lamport: 5
+%PUT received for id: ID1, Lamport: 7
+%PUT received for id: ID1, Lamport: 8

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="assignment2.AggregationServerTest" tests="4" skipped="0" failures="0" errors="0" timestamp="2025-09-14T17:54:43.215Z" hostname="Sandeeps-MacBook-Air.local" time="0.037">
+  <properties/>
+  <testcase name="testPersistence" classname="assignment2.AggregationServerTest" time="0.028"/>
+  <testcase name="testGetReturnsDataOr404" classname="assignment2.AggregationServerTest" time="0.005"/>
+  <testcase name="testExpiryRemovesOldEntry" classname="assignment2.AggregationServerTest" time="0.002"/>
+  <testcase name="testPutAddsDataAndReturns201Or200" classname="assignment2.AggregationServerTest" time="0.002"/>
+  <system-out><![CDATA[PUT received for id: ID1, Lamport: 1
+PUT received for id: ID1, Lamport: 3
+PUT received for id: ID1, Lamport: 5
+PUT received for id: ID1, Lamport: 7
+PUT received for id: ID1, Lamport: 8
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>
